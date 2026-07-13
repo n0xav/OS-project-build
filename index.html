@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no, maximum-scale=1.0, minimum-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="true">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Web OS">
+    <meta name="theme-color" content="#000000">
+    <meta name="description" content="Advanced mobile-first Web OS kernel emulator ecosystem">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%23000' width='192' height='192'/><circle cx='96' cy='96' r='40' fill='%23fff'/></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%23000' width='192' height='192'/><circle cx='96' cy='96' r='40' fill='%23fff'/></svg>">
+    <title>Web OS - Kernel Emulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * {
+            touch-action: none;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-font-smoothing: antialiased;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            width: 100vw;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+        }
+
+        #app-root {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+
+        .status-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: max(44px, env(safe-area-inset-top));
+            padding-top: env(safe-area-inset-top);
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 9998;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-left: 16px;
+            padding-right: 16px;
+        }
+
+        .status-item {
+            font-size: 12px;
+            color: #fff;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .desktop {
+            position: fixed;
+            top: max(44px, env(safe-area-inset-top));
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%);
+            overflow: hidden;
+        }
+
+        .window {
+            position: absolute;
+            background: rgba(20, 20, 20, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            min-width: 280px;
+            z-index: 100;
+        }
+
+        .window.focused {
+            box-shadow: 0 30px 80px rgba(100, 200, 255, 0.3), 0 0 30px rgba(100, 200, 255, 0.1);
+        }
+
+        .window-titlebar {
+            height: 44px;
+            padding: 0 12px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(0, 0, 0, 0.2) 100%);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: grab;
+            user-select: none;
+            border-radius: 16px 16px 0 0;
+        }
+
+        .window-titlebar:active {
+            cursor: grabbing;
+        }
+
+        .window-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+            flex: 1;
+        }
+
+        .window-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .window-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            transition: all 0.2s ease;
+        }
+
+        .window-btn.close {
+            background: rgba(255, 59, 48, 0.2);
+            color: #ff3b30;
+        }
+
+        .window-btn.close:active {
+            background: rgba(255, 59, 48, 0.4);
+        }
+
+        .window-btn.minimize {
+            background: rgba(255, 204, 0, 0.2);
+            color: #ffcc00;
+        }
+
+        .window-btn.minimize:active {
+            background: rgba(255, 204, 0, 0.4);
+        }
+
+        .window-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            color: #fff;
+        }
+
+        .window-content::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .window-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .window-content::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+        }
+
+        .app-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            padding: 16px;
+            width: 100%;
+        }
+
+        .app-icon {
+            aspect-ratio: 1;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 28px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: linear-gradient(135deg, rgba(100, 200, 255, 0.2) 0%, rgba(60, 160, 255, 0.1) 100%);
+        }
+
+        .app-icon:active {
+            transform: scale(0.92);
+            background: linear-gradient(135deg, rgba(100, 200, 255, 0.4) 0%, rgba(60, 160, 255, 0.2) 100%);
+        }
+
+        .app-icon-label {
+            font-size: 11px;
+            margin-top: 4px;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .control-center {
+            position: fixed;
+            top: max(44px, env(safe-area-inset-top));
+            right: 0;
+            width: 100%;
+            max-width: 320px;
+            height: 60%;
+            background: rgba(20, 20, 20, 0.95);
+            backdrop-filter: blur(20px);
+            border-left: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 9000;
+            padding: 16px;
+            overflow-y: auto;
+            transform: translateX(100%);
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .control-center.active {
+            transform: translateX(0);
+        }
+
+        .quick-settings {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .quick-setting-btn {
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s ease;
+        }
+
+        .quick-setting-btn.active {
+            background: rgba(100, 200, 255, 0.3);
+            border-color: rgba(100, 200, 255, 0.5);
+        }
+
+        .quick-setting-btn:active {
+            transform: scale(0.95);
+        }
+
+        .app-switcher {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: max(100px, calc(env(safe-area-inset-bottom) + 100px));
+            background: rgba(20, 20, 20, 0.95);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 8999;
+            display: flex;
+            gap: 8px;
+            padding: 8px max(8px, env(safe-area-inset-left));
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+        }
+
+        .app-switcher-item {
+            min-width: 80px;
+            height: 80px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            scroll-snap-align: start;
+            transition: all 0.2s ease;
+            font-size: 24px;
+        }
+
+        .app-switcher-item.active {
+            background: rgba(100, 200, 255, 0.2);
+            border-color: rgba(100, 200, 255, 0.5);
+        }
+
+        .app-switcher-item:active {
+            transform: scale(0.9);
+        }
+
+        .terminal-input {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .terminal-input input {
+            flex: 1;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(100, 200, 255, 0.3);
+            border-radius: 8px;
+            color: #64c8ff;
+            padding: 8px 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+
+        .terminal-input input::placeholder {
+            color: rgba(100, 200, 255, 0.5);
+        }
+
+        .terminal-input input:focus {
+            outline: none;
+            border-color: rgba(100, 200, 255, 0.6);
+            box-shadow: 0 0 8px rgba(100, 200, 255, 0.2);
+        }
+
+        .terminal-input button {
+            background: rgba(100, 200, 255, 0.2);
+            border: 1px solid rgba(100, 200, 255, 0.4);
+            border-radius: 8px;
+            color: #64c8ff;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        .terminal-input button:active {
+            background: rgba(100, 200, 255, 0.4);
+        }
+
+        .terminal-output {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #64c8ff;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .terminal-line {
+            margin: 4px 0;
+        }
+
+        .terminal-prompt {
+            color: #00ff00;
+            font-weight: 600;
+        }
+
+        .settings-group {
+            margin-bottom: 20px;
+        }
+
+        .settings-group-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.5);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+        }
+
+        .settings-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+
+        .settings-label {
+            font-size: 14px;
+            color: #fff;
+        }
+
+        .toggle-switch {
+            width: 50px;
+            height: 28px;
+            background: rgba(100, 200, 255, 0.3);
+            border: 1px solid rgba(100, 200, 255, 0.5);
+            border-radius: 14px;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .toggle-switch.active {
+            background: rgba(76, 175, 80, 0.3);
+            border-color: rgba(76, 175, 80, 0.6);
+        }
+
+        .toggle-switch-thumb {
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            background: #fff;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: all 0.3s ease;
+        }
+
+        .toggle-switch.active .toggle-switch-thumb {
+            left: 24px;
+        }
+
+        .metric-bar {
+            margin-top: 8px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .metric-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #64c8ff, #4169e1);
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+
+        @media (orientation: landscape) {
+            .status-bar {
+                height: max(32px, env(safe-area-inset-top));
+                padding-top: env(safe-area-inset-top);
+            }
+
+            .desktop {
+                top: max(32px, env(safe-area-inset-top));
+            }
+        }
+
+        @supports (padding: max(0px)) {
+            body {
+                padding-left: env(safe-area-inset-left);
+                padding-right: env(safe-area-inset-right);
+                padding-bottom: env(safe-area-inset-bottom);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app-root">
+        <div class="status-bar">
+            <div class="status-item" id="time-display">9:41</div>
+            <div class="status-item" id="kernel-status">Kernel Ready</div>
+            <div style="display: flex; gap: 8px;">
+                <div class="status-item" id="battery-status">100%</div>
+            </div>
+        </div>
+
+        <div class="desktop" id="desktop">
+            <div class="app-grid" id="homescreen">
+                <div class="app-icon" data-app="terminal">
+                    <div>
+                        <div style="font-size: 32px;">❯_</div>
+                        <div class="app-icon-label">Terminal</div>
+                    </div>
+                </div>
+                <div class="app-icon" data-app="settings">
+                    <div>
+                        <div style="font-size: 32px;">⚙️</div>
+                        <div class="app-icon-label">Settings</div>
+                    </div>
+                </div>
+                <div class="app-icon" data-app="processes">
+                    <div>
+                        <div style="font-size: 32px;">🔄</div>
+                        <div class="app-icon-label">Processes</div>
+                    </div>
+                </div>
+                <div class="app-icon" data-app="filesystem">
+                    <div>
+                        <div style="font-size: 32px;">📁</div>
+                        <div class="app-icon-label">Files</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="control-center" id="control-center">
+            <div style="margin-bottom: 20px;">
+                <div style="font-size: 12px; color: rgba(255, 255, 255, 0.5); margin-bottom: 8px;">BRIGHTNESS</div>
+                <input type="range" min="0" max="100" value="100" id="brightness-slider" style="width: 100%;">
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <div class="quick-settings">
+                    <button class="quick-setting-btn active" data-setting="wifi">📡 WiFi</button>
+                    <button class="quick-setting-btn active" data-setting="bluetooth">🔵 BT</button>
+                    <button class="quick-setting-btn" data-setting="airplane">✈️ Airplane</button>
+                    <button class="quick-setting-btn" data-setting="darkmode">🌙 Dark</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="app-switcher" id="app-switcher"></div>
+    </div>
+
+    <script src="core/kernel_emulator.js"></script>
+    <script src="core/gesture_engine.js"></script>
+    <script src="ui/compositor.js"></script>
+    <script src="apps/terminal.js"></script>
+    <script src="apps/settings.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

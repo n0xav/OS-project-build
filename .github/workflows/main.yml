@@ -1,0 +1,64 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy Web OS to Pages
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Validate HTML Structure
+        run: |
+          if ! grep -q "<!DOCTYPE html>" index.html; then
+            echo "✗ HTML structure validation failed"
+            exit 1
+          fi
+          echo "✓ HTML structure valid"
+
+      - name: Validate Manifest JSON
+        run: python3 -m json.tool manifest.json > /dev/null && echo "✓ Manifest JSON valid"
+
+      - name: Verify Core Files
+        run: |
+          files=("index.html" "manifest.json" "app.js" "sw.js")
+          for file in "${files[@]}"; do
+            [ -f "$file" ] && echo "✓ $file present" || exit 1
+          done
+
+      - name: Verify Module Structure
+        run: |
+          modules=("core/kernel_emulator.js" "core/gesture_engine.js" "ui/compositor.js" "apps/terminal.js" "apps/settings.js")
+          for module in "${modules[@]}"; do
+            [ -f "$module" ] && echo "✓ $module present" || exit 1
+          done
+
+      - name: Upload Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
